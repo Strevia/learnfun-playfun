@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <set>
+#include <cmath>
 
 #include <unistd.h>
 #include <sys/types.h>
