@@ -10,6 +10,7 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 AC_PROG_CXX
 AM_PROG_AR
 LT_INIT
+AM_PROG_CC_C_O
 # We require C++11
 AX_CXX_COMPILE_STDCXX_11(,[mandatory])
 PKG_CHECK_MODULES([SDL], [sdl])
