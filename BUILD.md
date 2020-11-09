@@ -13,7 +13,7 @@ sudo apt install autoconf automake build-essential libpng-dev libsdl1.2-dev libs
 sudo yum install aclocal autoconf automake autoreconf gcc-c++ libpng-devel libtool libtool-devel m4 make perl-Thread-Queue protobuf-devel SDL-devel SDL_net-devel -y
 ```
 
-## Compling:
+## Compiling:
 Run the following commands:
 ```
 ./autogen.sh
