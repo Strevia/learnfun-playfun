@@ -1344,6 +1344,7 @@ struct PlayFun {
 
     PopulateFutures(&futures);
     for (;; iters++) {
+      cout << sizeof(this);
 
       // XXX TODO this probably gets confused by backtracking.
       motifs->Checkpoint(movie.size());

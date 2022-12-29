@@ -1,0 +1,1 @@
+wine /home/pnissen/Downloads/fceux-2.6.4-win32/fceux.exe -playmovie /home/pnissen/Documents/learnfun-playfun/tasbot/PunchOut-playfun-futures-progress.fm2 /home/pnissen/Documents/learnfun-playfun/tasbot/PunchOut.nes
