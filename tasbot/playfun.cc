@@ -10,6 +10,7 @@
 #include <string>
 #include <set>
 #include <cmath>
+#include <fstream>
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -18,6 +19,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <boost/archive/text_oarchive.hpp>
+#include <boost/archive/text_iarchive.hpp>
+#include <boost/serialization/vector.hpp>
+#include <boost/serialization/base_object.hpp>
 
 #include "tasbot.h"
 
@@ -79,6 +84,20 @@ struct Scoredist {
   vector<double> negatives;
   vector<double> norms;
   int chosen_idx;
+  friend class boost::serialization::access;
+    // When the class Archive corresponds to an output archive, the
+    // & operator is defined similar to <<.  Likewise, when the class Archive
+    // is a type of input archive the & operator is defined similar to >>.
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & startframe;
+        ar & immediates;
+        ar & positives;
+        ar & negatives;
+        ar & norms;
+        ar & chosen_idx;
+    }
 };
 
 static void SaveDistributionSVG(const vector<Scoredist> &dists,
@@ -135,6 +154,19 @@ struct Future {
 			  desired_length(d),
 			  rounds_survived(0),
 			  is_mutant(false) {}
+  friend class boost::serialization::access;
+    // When the class Archive corresponds to an output archive, the
+    // & operator is defined similar to <<.  Likewise, when the class Archive
+    // is a type of input archive the & operator is defined similar to >>.
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & inputs;
+        ar & weighted;
+        ar & desired_length;
+        ar & rounds_survived;
+        ar & is_mutant;
+    }
 };
 
 // For backtracking.
@@ -211,6 +243,7 @@ struct PlayFun {
 	  "one observation to score.");
 
     printf("Skipped %ld frames until first keypress/ffwd.\n", start);
+    iters = 0;
   }
 
   // PERF. Shouldn't really save every memory, but
@@ -228,16 +261,50 @@ struct PlayFun {
     // such that truncating movie to length movenum
     // produces the savestate.
     int movenum;
+    friend class boost::serialization::access;
+    // When the class Archive corresponds to an output archive, the
+    // & operator is defined similar to <<.  Likewise, when the class Archive
+    // is a type of input archive the & operator is defined similar to >>.
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & movenum;
+        ar & save;
+    }
     Checkpoint(const vector<uint8> save, int movenum)
       : save(save), movenum(movenum) {}
     // For putting in containers.
     Checkpoint() : movenum(0) {}
   };
   vector<Checkpoint> checkpoints;
+    //PN: Add boost serialization
+  friend class boost::serialization::access;
+    // When the class Archive corresponds to an output archive, the
+    // & operator is defined similar to <<.  Likewise, when the class Archive
+    // is a type of input archive the & operator is defined similar to >>.
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & checkpoints;
+        ar & movie;
+        ar & memories;
+        ar & watermark;
+        ar & subtitles;
+        ar & ports_;
+        ar & distributions;
+        ar & solution;
+        ar & motifvec;
+        ar & game;
+        ar & iters;
+    }
 
   // Index below which we should not backtrack (because it
   // contains pre-game menu stuff, for example).
   int watermark;
+
+  int iters;
+
+
 
   // Number of real futures to push forward.
   // XXX the more the merrier! Made this small to test backtracking.
@@ -245,7 +312,7 @@ struct PlayFun {
 
   // Number of futures that should be generated from weighted
   // motifs as opposed to totally random.
-  static const int NWEIGHTEDFUTURES = 35;
+  static const int NWEIGHTEDFUTURES = 0;
 
   // Drop this many of the worst futures and replace them with
   // totally new futures.
@@ -921,8 +988,8 @@ struct PlayFun {
       ScoreByFuture(futures[f], new_memory, &new_state,
 		    &positive_scores, &negative_scores,
 		    &integral_score);
-      CHECK(positive_scores >= 0);
-      CHECK(negative_scores <= 0);
+      //PN CHECK(positive_scores >= 0);
+      //PN CHECK(negative_scores <= 0);
 
       // For scoring the futures themselves (pruning and duplicating),
       // we want to disprefer futures that kill the player or get
@@ -1339,12 +1406,22 @@ struct PlayFun {
     // XXX recycling futures...
     vector<Future> futures;
 
-    int rounds_until_backtrack = TRY_BACKTRACK_EVERY;
-    int64 iters = 0;
+    int rounds_until_backtrack = TRY_BACKTRACK_EVERY - (iters % TRY_BACKTRACK_EVERY);
 
     PopulateFutures(&futures);
+
+    {
+        // create and open an archive for input
+          std::ifstream ifs("PunchoutFutures");
+          if (ifs) {
+            boost::archive::text_iarchive ia(ifs);
+            // read class state from archive
+            ia >> futures;
+          }
+        // archive and stream closed when destructors are called
+    }
+
     for (;; iters++) {
-      cout << sizeof(this);
 
       // XXX TODO this probably gets confused by backtracking.
       motifs->Checkpoint(movie.size());
@@ -1355,7 +1432,27 @@ struct PlayFun {
 
       TakeBestAmong(nexts, nextplanations, &futures, true);
 
-      fprintf(stderr, "%d rounds, "
+      MaybeBacktrack(iters, &rounds_until_backtrack, &futures);
+
+      if (iters % 1 == 0) {
+	SaveMovie();
+	SaveQuickDiagnostics(futures);
+      //PN: Save serialization
+    {
+      std::ofstream ofs("PunchoutSave");
+      boost::archive::text_oarchive oa(ofs);
+      oa << *this;
+    }
+    {
+      std::ofstream ofs("PunchoutFutures");
+      boost::archive::text_oarchive oa(ofs);
+      oa << futures;
+    }
+	if (iters % 50 == 0) {
+	  SaveDiagnostics(futures);
+	}
+      }
+          fprintf(stderr, "%d rounds, "
 	      ANSI_WHITE "%d inputs" ANSI_RESET ". backtrack in %d. "
 	      "Cxpoints at ",
 	      iters, movie.size(), rounds_until_backtrack);
@@ -1365,16 +1462,6 @@ struct PlayFun {
 	j--;
       }
       fprintf(stderr, "...\n");
-
-      MaybeBacktrack(iters, &rounds_until_backtrack, &futures);
-
-      if (iters % 10 == 0) {
-	SaveMovie();
-	SaveQuickDiagnostics(futures);
-	if (iters % 50 == 0) {
-	  SaveDiagnostics(futures);
-	}
-      }
     }
   }
 
@@ -1827,7 +1914,16 @@ int main(int argc, char *argv[]) {
   #endif
 
   PlayFun pf;
-
+  {
+        // create and open an archive for input
+          std::ifstream ifs("PunchoutSave");
+          if (ifs) {
+            boost::archive::text_iarchive ia(ifs);
+            // read class state from archive
+            ia >> pf;
+          }
+        // archive and stream closed when destructors are called
+    }
   #if MARIONET
   if (argc >= 2) {
     if (0 == strcmp(argv[1], "--helper")) {

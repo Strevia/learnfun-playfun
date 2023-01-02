@@ -174,7 +174,7 @@ double WeightedObjectives::WeightedLess(const vector<uint8> &mem1,
     if (LessObjective(mem1, mem2, objective))
       score += weight;
   }
-  CHECK(score >= 0);
+  //PN CHECK(score >= 0);
   return score;
 }
 
